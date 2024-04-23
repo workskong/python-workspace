@@ -1,8 +1,10 @@
 import os
 import streamlit as st
+import time  # 시간 모듈 추가
 from langchain.embeddings import CacheBackedEmbeddings
 from langchain.storage import LocalFileStore
 # from langchain_openai import OpenAIEmbeddings
+from langchain_community.embeddings import HuggingFaceInstructEmbeddings
 from langchain_community.embeddings.huggingface import HuggingFaceEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -13,11 +15,10 @@ from langchain_community.document_loaders.unstructured import UnstructuredFileLo
 from langchain_community.vectorstores.faiss import FAISS
 from langserve import RemoteRunnable
 
-
 USE_BGE_EMBEDDING = True
 
 if not USE_BGE_EMBEDDING:
-    os.environ["OPENAI_API_KEY"] = "OPENAI API KEY 입력"
+    os.environ["OPENAI_API_KEY"] = ""
 
 LANGSERVE_ENDPOINT = "https://accurate-inviting-fowl.ngrok-free.app/llm/"
 
@@ -28,7 +29,7 @@ if not os.path.exists(".cache/embeddings"):
 if not os.path.exists(".cache/files"):
     os.mkdir(".cache/files")
 
-RAG_PROMPT_TEMPLATE = """You are an AI that answers questions. Search and then answer the questions using context. If you can't find the answer, do not answer!.
+RAG_PROMPT_TEMPLATE = """You are an AI that answers questions. Search and then answer the questions using context. Please answer the following questions at length. If you can't find the answer, do not answer!.
 Question: {question} 
 Context: {context} 
 Answer:"""
@@ -56,6 +57,8 @@ def format_docs(docs):
 
 @st.cache_resource(show_spinner="Embedding file...")
 def embed_file(file):
+    start_time = time.time()  # 시작 시간 측정
+
     file_content = file.read()
     file_path = f"./.cache/files/{file.name}"
     with open(file_path, "wb") as f:
@@ -64,8 +67,8 @@ def embed_file(file):
     cache_dir = LocalFileStore(f"./.cache/embeddings/{file.name}")
 
     text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=2000,
-        chunk_overlap=500,
+        chunk_size=1000,
+        chunk_overlap=100,
         separators=["\n\n", "\n", "(?<=\. )", " ", ""],
         length_function=len,
     )
@@ -74,12 +77,8 @@ def embed_file(file):
 
     if USE_BGE_EMBEDDING:
         model_name = "BAAI/bge-m3"
-        model_kwargs = {
-            # "device": "cuda"
-            # device": "mps"
-            "device": "cpu"
-        }
-        encode_kwargs = {"normalize_embeddings": True}
+        model_kwargs = {"device": "cuda", "trust_remote_code": True}
+        encode_kwargs = {"normalize_embeddings": False}
         embeddings = HuggingFaceEmbeddings(
             model_name=model_name,
             model_kwargs=model_kwargs,
@@ -90,6 +89,11 @@ def embed_file(file):
     cached_embeddings = CacheBackedEmbeddings.from_bytes_store(embeddings, cache_dir)
     vectorstore = FAISS.from_documents(docs, embedding=cached_embeddings)
     retriever = vectorstore.as_retriever()
+
+    end_time = time.time()  # 종료 시간 측정
+    elapsed_time = end_time - start_time  # 소요된 시간 계산
+    st.write(f"Embedding took {elapsed_time:.2f} seconds")  # 시간 출력
+
     return retriever
 
 def format_docs(docs):
