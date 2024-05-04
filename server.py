@@ -24,9 +24,7 @@ app.add_middleware(
 
 @app.get("/")
 async def redirect_root_to_docs():
-    return RedirectResponse("/prompt/playground")
-
-add_routes(app, chain, path="/prompt")
+    return RedirectResponse("/chat/playground")
 
 class InputChat(BaseModel):
     """Input for the chat endpoint."""
@@ -39,15 +37,16 @@ add_routes(
     app,
     chat_chain.with_types(input_type=InputChat),
     path="/chat",
-    enable_feedback_endpoint=True,
-    enable_public_trace_link_endpoint=True,
+    enable_feedback_endpoint=False,
+    enable_public_trace_link_endpoint=False,
     playground_type="chat",
 )
 
+add_routes(app, chain, path="/prompt")
 add_routes(app, EN_TO_KO_chain, path="/translate")
 add_routes(app, model, path="/llm")
 
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8500)
